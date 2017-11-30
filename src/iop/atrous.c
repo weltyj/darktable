@@ -644,6 +644,9 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
             MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   int i = 0;
+
+  float prev_t = .1f ;
+
   for(; i < MAX_NUM_SCALES; i++)
   {
     // actual filter support on scaled buffer
@@ -653,17 +656,61 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
     const float i_in = dt_log2f((supp_in - 1) * .5f) - 1.0f;
     // i_in = max_scale .. .. .. 0
     const float t = 1.0f - (i_in + .5f) / i0;
+    if(t < 0.0f) break ;
+
     boost[i][3] = boost[i][0] = 2.0f * dt_draw_curve_calc_value(d->curve[atrous_L], t);
     boost[i][1] = boost[i][2] = 2.0f * dt_draw_curve_calc_value(d->curve[atrous_c], t);
+
     for(int k = 0; k < 4; k++) boost[i][k] *= boost[i][k];
+
+
     thrs[i][0] = thrs[i][3] = powf(2.0f, -7.0f * (1.0f - t)) * 10.0f
                               * dt_draw_curve_calc_value(d->curve[atrous_Lt], t);
     thrs[i][1] = thrs[i][2] = powf(2.0f, -7.0f * (1.0f - t)) * 20.0f
                               * dt_draw_curve_calc_value(d->curve[atrous_ct], t);
     sharp[i] = 0.0025f * dt_draw_curve_calc_value(d->curve[atrous_s], t);
-    // printf("scale %d boost %f %f thrs %f %f sharpen %f\n", i, boost[i][0], boost[i][2], thrs[i][0],
-    // thrs[i][1], sharp[i]);
-    if(t < 0.0f) break;
+
+
+    // a fix for the non-discrete nature of how the coarsest scale affects results -- Jeff Welty
+    // what happens is the coarsest scale is applied instantaneously as the image size changes, either
+    // because HQ export is turned off, or the preview window scale changes
+    // this fix slowly increases the effect of the new coarsest scale, creating a more uniform
+    // application of the entire module
+
+    // detect coarsest level by calculating t for i+1, if t of i+1 it is < 0. we are at the coarsest level
+
+    const float supp_next = 2 * (2 << (i+1)) + 1;
+    // approximates this filter size on unscaled input image:
+    const float supp_in_next = supp_next * (1.0f / scale);
+    const float i_in_next = dt_log2f((supp_in_next - 1) * .5f) - 1.0f;
+    // i_in = max_scale .. .. .. 0
+    const float t_next = 1.0f - (i_in_next + .5f) / i0;
+
+    if(t_next < 0.0f) {
+      // asymptotic values for t, of the ith coarseness, emperically calculated.  0 and 1 were not calculated
+      const float t_max[] = {1.f, 1.f, .6670f,.4006f,.2857f,.2228f,.1818f,.1538f} ;
+
+      // effect factor scales both the boost, sharpness on the last (coarsest) level
+      float effect_factor = fminf(1.0f, t / t_max[i]) ;
+
+      //printf("t_prev:%0.3f t_max:%0.3f ef:%0.3 ", prev_t, t_max[i], effect_factor) ;
+
+      for(int k = 0; k < 4; k++) boost[i][k] = 1.+effect_factor*(boost[i][k]-1.0) ;
+      sharp[i] *= effect_factor ;
+
+      // second coarsest level (i-1) needs an adjustment too, based on observations of resultant images
+      if(i > 2) {
+        float ef_prev = fminf(1.0f, prev_t / t_max[i-1]) ;
+        for(int k = 0; k < 4; k++) boost[i-1][k] = 1.+ef_prev*(boost[i-1][k]-1.0) ;
+        sharp[i-1] *= ef_prev ;
+      }
+    }
+
+    prev_t = t ;
+
+    //printf("i %d scale %5.3f supp_in %4.0f supp %4.0f, t %5.3f boost %f %f thrs %f %f sharpen %f\n",
+      //i, scale, supp_in, supp, t, boost[i][0], boost[i][2], thrs[i][0], thrs[i][1], sharp[i]);
+
   }
   return i;
 }
@@ -875,6 +922,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     dt_opencl_set_kernel_arg(devid, gd->kernel_synthesize, 10, sizeof(float), (void *)&boost[scale][1]);
     dt_opencl_set_kernel_arg(devid, gd->kernel_synthesize, 11, sizeof(float), (void *)&boost[scale][2]);
     dt_opencl_set_kernel_arg(devid, gd->kernel_synthesize, 12, sizeof(float), (void *)&boost[scale][3]);
+
+    //printf("process_cl(), synthesize scale %d, boost[0] is %f\n", scale, boost[scale][0]) ;
 
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_synthesize, sizes);
     if(err != CL_SUCCESS) goto error;
