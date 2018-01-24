@@ -22,7 +22,7 @@
 #ifndef __SSE2__
 
 #if !defined _XOPEN_SOURCE && !defined(__DragonFly__) && !defined(__FreeBSD__) && !defined(__NetBSD__)       \
-    && !defined(__OpenBSD__) && !defined(__WIN32__)
+    && !defined(__OpenBSD__) && !defined(_WIN32)
 #define _XOPEN_SOURCE
 #endif
 
@@ -459,10 +459,10 @@ PRE_ALWAYS static __m128i mm_recursion(__m128i *a, __m128i *b, __m128i c, __m128
 
 /**
  * This function represents the recursion formula.
- * @param a a 128-bit part of the interal state array
- * @param b a 128-bit part of the interal state array
- * @param c a 128-bit part of the interal state array
- * @param d a 128-bit part of the interal state array
+ * @param a a 128-bit part of the internal state array
+ * @param b a 128-bit part of the internal state array
+ * @param c a 128-bit part of the internal state array
+ * @param d a 128-bit part of the internal state array
  * @param mask 128-bit mask
  * @return output
  */

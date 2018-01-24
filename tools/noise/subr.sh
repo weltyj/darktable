@@ -331,7 +331,7 @@ get_image_iso() {
 			#     1. "Exif.NikonIi.*" are bytes, not even
 			#        shorts, so they're smaller than other
 			#        keys.
-			#     2. That looks like versionned nodes:
+			#     2. That looks like versioned nodes:
 			#        "Nikon2" vs. "Nikon3".
 			iso=$(get_exif_key "$file" Exif.Nikon3.ISOSpeed)
 			if [ -z "$iso" -o "$iso" = "0" ]; then
@@ -339,6 +339,11 @@ get_image_iso() {
 			fi
 			if [ -z "$iso" -o "$iso" = "0" ]; then
 				iso=$(get_exif_key "$file" Exif.NikonIi.ISO)
+				# read hi/low iso setting
+				ciso=$(echo $iso | cut -d' ' -f2)
+				if [ "$ciso" = "Hi" -o "$ciso" = "Lo" ]; then
+					iso=$(echo $iso  | cut -d' '  -f1 )
+				fi
 			fi
 			;;
     [Cc][Aa][Nn][Oo][Nn]*)
@@ -446,7 +451,7 @@ list_input_images() {
 		case "$image" in
 		*.[Jj][Pp][Gg]|*.[Jj][Pp][Ee][Gg])
 			# Skip jpeg files, if any. Other files don't
-			# have Exif and will be skept automatically.
+			# have Exif and will be skipped automatically.
 			continue
 			;;
 		esac

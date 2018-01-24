@@ -41,7 +41,7 @@
 #include <sys/prctl.h> // for PR_SET_PTRACER, prctl
 #endif
 
-#ifndef __WIN32__
+#ifndef _WIN32
 #include <sys/wait.h> // for waitpid
 #endif
 
@@ -55,19 +55,19 @@
 
 typedef void(dt_signal_handler_t)(int);
 
-#if !defined(__APPLE__) && !defined(__WIN32__)
+#if !defined(__APPLE__) && !defined(_WIN32)
 static dt_signal_handler_t *_dt_sigsegv_old_handler = NULL;
 #endif
 
 // deer graphicsmagick, please stop messing with the stuff that you should not be touching at all.
 // based on GM's InitializeMagickSignalHandlers() and MagickSignalHandlerMessage()
-#if !defined(__WIN32__)
+#if !defined(_WIN32)
 static const int _signals_to_preserve[] = { SIGHUP,  SIGINT,  SIGQUIT, SIGILL,  SIGABRT, SIGBUS, SIGFPE,
                                             SIGPIPE, SIGALRM, SIGTERM, SIGCHLD, SIGXCPU, SIGXFSZ };
 #else
 static const int _signals_to_preserve[] = { SIGABRT, SIGFPE, SIGILL, SIGINT, SIGSEGV, SIGTERM };
 static LPTOP_LEVEL_EXCEPTION_FILTER _dt_exceptionfilter_old_handler = NULL;
-#endif //! defined (__WIN32__)
+#endif //! defined (_WIN32)
 
 #define _NUM_SIGNALS_TO_PRESERVE (sizeof(_signals_to_preserve) / sizeof(_signals_to_preserve[0]))
 static dt_signal_handler_t *_orig_sig_handlers[_NUM_SIGNALS_TO_PRESERVE] = { NULL };
@@ -86,7 +86,7 @@ static int dprintf(int fd, const char *fmt, ...) __attribute__((format(printf, 2
 }
 #endif
 
-#if !defined(__APPLE__) && !defined(__WIN32__)
+#if !defined(__APPLE__) && !defined(_WIN32)
 static void _dt_sigsegv_handler(int param)
 {
   pid_t pid;
@@ -174,7 +174,7 @@ static LONG WINAPI dt_toplevel_exception_handler(PEXCEPTION_POINTERS pExceptionI
   }
   else
   {
-    gchar *exception_message = g_strdup_printf("An unhandled exception occured.\nBacktrace will be written to: %s "
+    gchar *exception_message = g_strdup_printf("An unhandled exception occurred.\nBacktrace will be written to: %s "
                                                "after you click on the OK button.\nIf you report this issue, "
                                                "please share this backtrace with the developers.\n",
                                                name_used);
@@ -248,7 +248,7 @@ void dt_set_signal_handlers()
   Set up exception handler for backtrace on Windows
   Works when there is NO SIGSEGV handler installed
 
-  SetUnhandledExceptionFilter handler must be saved on the first invokation
+  SetUnhandledExceptionFilter handler must be saved on the first invocation
   as GraphicsMagick is overwriting SetUnhandledExceptionFilter and all other signals in InitializeMagick()
   Eventually InitializeMagick() should be fixed upstream not to ignore existing exception handlers
   */

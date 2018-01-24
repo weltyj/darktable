@@ -298,7 +298,7 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
       if(MODE_LOCAL_AVERAGE == d->op_mode && out[(size_t)v * width * ch + t * ch + 3] > thresh)
       {
         float local_avg = 0.0;
-        // use some and not all values from the neigbourhood to speed things up:
+        // use some and not all values from the neighbourhood to speed things up:
         const int *tmp = xy_avg;
         for(int u = 0; u < samples_avg; u++)
         {
@@ -341,7 +341,7 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
           int dy = *tmp++;
           int x = MAX(0, MIN(width - 1, t + dx));
           int y = MAX(0, MIN(height - 1, v + dy));
-          // inverse chroma weighted average of neigbouring pixels inside window
+          // inverse chroma weighted average of neighbouring pixels inside window
           // also taking average edge chromaticity into account (either global or local average)
           weight = 1.0 / (out[(size_t)y * width * ch + x * ch + 3] + avg_edge_chroma);
           atot += weight * in[(size_t)y * width * ch + x * ch + 1];

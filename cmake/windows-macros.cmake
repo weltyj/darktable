@@ -116,7 +116,7 @@ if (WIN32)
 
   install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} DESTINATION bin COMPONENT DTApplication)
 
-  # TODO: Add auxilliary files for openssl?
+  # TODO: Add auxiliary files for openssl?
 
   # Add pixbuf loader libraries
   # FILE(GLOB_RECURSE GDK_PIXBUF "${MINGW_PATH}/../lib/gdk-pixbuf-2.0/2.10.0/loaders/*.dll"  )
@@ -160,8 +160,8 @@ if (WIN32)
 
   # Add GraphicsMagick libraries
   install(DIRECTORY
-      "${MINGW_PATH}/../lib/GraphicsMagick-1.3.25/modules-Q8/coders"
-      DESTINATION lib/GraphicsMagick-1.3.25/modules-Q8/
+      "${MINGW_PATH}/../lib/GraphicsMagick-1.3.27/modules-Q8/coders"
+      DESTINATION lib/GraphicsMagick-1.3.27/modules-Q8/
       COMPONENT DTApplication
       FILES_MATCHING PATTERN "*"
       PATTERN "*.a" EXCLUDE
@@ -184,12 +184,20 @@ if (WIN32)
       DESTINATION share/lensfun/
       COMPONENT DTApplication)
 
-  # Add zone.tab for time zone info
-  install(FILES
-      "${MINGW_PATH}/../../usr/share/zoneinfo/zone.tab"
-      DESTINATION share/darktable/
-      COMPONENT DTApplication
-  )
+  # Add iso-codes
+  if(ISO_CODES_FOUND)
+    install(FILES
+        "${ISO_CODES_LOCATION}/iso_639-2.json"
+        DESTINATION share/iso-codes/json/
+        COMPONENT DTApplication
+    )
+    file(GLOB ISO_CODES_MO_FILES RELATIVE "${ISO_CODES_LOCALEDIR}" "${ISO_CODES_LOCALEDIR}/*/LC_MESSAGES/iso_639.mo")
+    foreach(MO ${ISO_CODES_MO_FILES})
+      string(REPLACE "iso_639.mo" "" MO_TARGET_DIR "${MO}")
+      install(FILES "${ISO_CODES_LOCALEDIR}/${MO}" DESTINATION "share/locale/${MO_TARGET_DIR}" COMPONENT DTApplication)
+    endforeach()
+  endif(ISO_CODES_FOUND)
+
 endif(WIN32)
 
 endfunction()

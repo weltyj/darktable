@@ -375,13 +375,24 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   snprintf(filename, sizeof(filename), "%s/kernels/programs.conf", dtpath);
   char kerneldir[PATH_MAX] = { 0 };
   snprintf(kerneldir, sizeof(kerneldir), "%s/kernels", dtpath);
+  char *escapedkerneldir = NULL;
+#ifndef __APPLE__
+  escapedkerneldir = g_strdup_printf("\"%s\"", kerneldir);
+#else
+  escapedkerneldir = dt_util_str_replace(kerneldir, " ", "\\ ");
+#endif
 
-  options = g_strdup_printf("-cl-fast-relaxed-math %s -D%s=1 -I\"%s\"",
+  options = g_strdup_printf("-cl-fast-relaxed-math %s -D%s=1 -I%s",
                             (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
-                            dt_opencl_get_vendor_by_id(vendor_id), kerneldir);
+                            dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir);
   cl->dev[dev].options = strdup(options);
+
+  dt_print(DT_DEBUG_OPENCL, "[opencl_init] options for OpenCL compiler: %s\n", options);
+
   g_free(options);
   options = NULL;
+  g_free(escapedkerneldir);
+  escapedkerneldir = NULL;
 
   const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "colorspace.cl", "common.h", NULL };
   char *includemd5[DT_OPENCL_MAX_INCLUDES] = { NULL };
@@ -741,7 +752,7 @@ finally:
       {
         // set scheduling profile to "multiple GPUs" if more than one device has been found
         dt_conf_set_string("opencl_scheduling_profile", "multiple GPUs");
-        dt_print(DT_DEBUG_OPENCL, "[opencl_init] set scheduling profile for multipe GPUs.\n");
+        dt_print(DT_DEBUG_OPENCL, "[opencl_init] set scheduling profile for multiple GPUs.\n");
         dt_control_log(_("multiple GPUs detected - opencl scheduling profile has been set accordingly."));
       }
       else if(tcpu >= 6.0f * tgpumin)
@@ -2447,7 +2458,7 @@ static dt_opencl_scheduling_profile_t dt_opencl_get_scheduling_profile(void)
 static void dt_opencl_set_synchronization_timeout(int value)
 {
   darktable.opencl->opencl_synchronization_timeout = value;
-  dt_print(DT_DEBUG_OPENCL, "[opencl_synchronization_timeout] synchronization timout set to %d\n", value);
+  dt_print(DT_DEBUG_OPENCL, "[opencl_synchronization_timeout] synchronization timeout set to %d\n", value);
 }
 
 /** adjust opencl subsystem according to scheduling profile */

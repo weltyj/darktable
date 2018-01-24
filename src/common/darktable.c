@@ -45,6 +45,7 @@
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/imageio_module.h"
+#include "common/l10n.h"
 #include "common/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
@@ -94,10 +95,6 @@
 #include <omp.h>
 #endif
 
-#ifdef _WIN32
-#include "win/dtwin.h"
-#endif //_WIN32
-
 #ifdef USE_LUA
 #include "lua/configuration.h"
 #endif
@@ -106,6 +103,10 @@ darktable_t darktable;
 
 static int usage(const char *argv0)
 {
+#ifdef _WIN32
+  char *logfile = g_build_filename(g_get_user_cache_dir(), "darktable", "darktable-log.txt", NULL);
+#endif
+
   printf("usage: %s [options] [IMG_1234.{RAW,..}|image_folder/]\n", argv0);
   printf("\n");
   printf("options:\n");
@@ -130,6 +131,15 @@ static int usage(const char *argv0)
   printf("  -t <num openmp threads>\n");
   printf("  --tmpdir <tmp directory>\n");
   printf("  --version\n");
+#ifdef _WIN32
+  printf("\n");
+  printf("  note: debug log and output will be written to this file:\n");
+  printf("        %s\n", logfile);
+#endif
+
+#ifdef _WIN32
+  g_free(logfile);
+#endif
 
   return 1;
 }
@@ -320,7 +330,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 {
   double start_wtime = dt_get_wtime();
 
-#ifndef __WIN32__
+#ifndef _WIN32
   if(getuid() == 0 || geteuid() == 0)
     printf(
         "WARNING: either your user id or the effective user id are 0. are you running darktable as root?\n");
@@ -338,7 +348,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   int sse2_supported = 0;
 
 #ifdef HAVE_BUILTIN_CPU_SUPPORTS
-  // NOTE: _may_i_use_cpu_feature() looks better, but only avaliable in ICC
+  // NOTE: _may_i_use_cpu_feature() looks better, but only available in ICC
   __builtin_cpu_init();
   sse2_supported = __builtin_cpu_supports("sse2");
 #else
@@ -418,6 +428,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_pthread_mutex_init(&(darktable.db_insert), NULL);
   dt_pthread_mutex_init(&(darktable.plugin_threadsafe), NULL);
   dt_pthread_mutex_init(&(darktable.capabilities_threadsafe), NULL);
+  dt_pthread_mutex_init(&(darktable.exiv2_threadsafe), NULL);
   darktable.control = (dt_control_t *)calloc(1, sizeof(dt_control_t));
 
   // database
@@ -705,7 +716,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     // I doubt that connecting to dbus for darktable-cli makes sense
     darktable.dbus = dt_dbus_init();
 
-    // make sure that we have no stale global progress bar visible. thus it's run as early is possible
+    // make sure that we have no stale global progress bar visible. thus it's run as early as possible
     dt_control_progress_init(darktable.control);
   }
 
@@ -738,35 +749,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_conf_init(darktable.conf, darktablerc, config_override);
   g_slist_free_full(config_override, g_free);
 
-  // set the interface language
-  const gchar *lang = dt_conf_get_string("ui_last/gui_language");
-#if defined(_WIN32)
-  // get the default locale if no language preference was specified in the config file
-  if(lang == NULL || lang[0] == '\0')
-  {
-    const wchar_t *wcLocaleName = NULL;
-    wcLocaleName = dtwin_get_locale();
-    if(wcLocaleName != NULL)
-    {
-      gchar *langLocale;
-      langLocale = g_utf16_to_utf8(wcLocaleName, -1, NULL, NULL, NULL);
-      if(langLocale != NULL)
-      {
-        g_free((gchar *)lang);
-        lang = g_strdup(langLocale);
-      }
-    }
-  }
-#endif // defined (_WIN32)
-
-  if(lang != NULL && lang[0] != '\0')
-  {
-    g_setenv("LANGUAGE", lang, 1);
-    if(setlocale(LC_ALL, lang) != NULL) gtk_disable_setlocale();
-    setlocale(LC_MESSAGES, lang);
-    g_setenv("LANG", lang, 1);
-  }
-  g_free((gchar *)lang);
+  // set the interface language and prepare selection for prefs
+  darktable.l10n = dt_l10n_init(init_gui);
 
   // we need this REALLY early so that error messages can be shown, however after gtk_disable_setlocale
   if(init_gui)
@@ -970,7 +954,16 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     time(&now);
     struct tm lt;
     localtime_r(&now, &lt);
-    if(lt.tm_mon == 3 && lt.tm_mday == 1) mode = "knight";
+    if(lt.tm_mon == 3 && lt.tm_mday == 1)
+    {
+      int current_year = lt.tm_year + 1900;
+      int last_year = dt_conf_get_int("ui_last/april1st");
+      if(last_year < current_year)
+      {
+        dt_conf_set_int("ui_last/april1st", current_year);
+        mode = "knight";
+      }
+    }
     // we have to call dt_ctl_switch_mode_to() here already to not run into a lua deadlock.
     // having another call later is ok
     dt_ctl_switch_mode_to(mode);
@@ -1089,6 +1082,7 @@ void dt_cleanup()
   dt_pthread_mutex_destroy(&(darktable.db_insert));
   dt_pthread_mutex_destroy(&(darktable.plugin_threadsafe));
   dt_pthread_mutex_destroy(&(darktable.capabilities_threadsafe));
+  dt_pthread_mutex_destroy(&(darktable.exiv2_threadsafe));
 
   dt_exif_cleanup();
 }
@@ -1121,7 +1115,7 @@ void *dt_alloc_align(size_t alignment, size_t size)
 {
 #if defined(__FreeBSD_version) && __FreeBSD_version < 700013
   return malloc(size);
-#elif defined(__WIN32__)
+#elif defined(_WIN32)
   return _aligned_malloc(size, alignment);
 #else
   void *ptr = NULL;
@@ -1130,7 +1124,7 @@ void *dt_alloc_align(size_t alignment, size_t size)
 #endif
 }
 
-#ifdef __WIN32__
+#ifdef _WIN32
 void dt_free_align(void *mem)
 {
   _aligned_free(mem);

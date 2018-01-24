@@ -133,7 +133,7 @@ static int show_pango_text(cairo_t *cr, char *text, float x_pos, float y_pos, fl
 
   if(right_aligned) x_pos -= text_width;
 
-  if(sensitive) set_text_color(cr, sensitive);
+  set_text_color(cr, sensitive);
   if(indicator) set_indicator_color(cr, 1);
   cairo_move_to(cr, x_pos, y_pos);
   pango_cairo_show_layout(cr, layout);
@@ -411,8 +411,8 @@ static gboolean dt_bauhaus_popup_button_release(GtkWidget *widget, GdkEventButto
     darktable.bauhaus->end_mouse_x = x - wx;
     darktable.bauhaus->end_mouse_y = y - wy;
     dt_bauhaus_widget_accept(darktable.bauhaus->current);
-    dt_bauhaus_hide_popup();
   }
+  dt_bauhaus_hide_popup();
   return TRUE;
 }
 
@@ -440,7 +440,6 @@ static gboolean dt_bauhaus_popup_button_press(GtkWidget *widget, GdkEventButton 
   {
     dt_bauhaus_widget_reject(darktable.bauhaus->current);
   }
-  dt_bauhaus_hide_popup();
   return TRUE;
 }
 
@@ -568,7 +567,7 @@ void dt_bauhaus_init()
   // gtk_window_set_modal(GTK_WINDOW(c->popup_window), TRUE);
   // gtk_window_set_decorated(GTK_WINDOW(c->popup_window), FALSE);
 
-  // for pie menue:
+  // for pie menu:
   // gtk_window_set_position(GTK_WINDOW(c->popup_window), GTK_WIN_POS_MOUSE);// | GTK_WIN_POS_CENTER);
 
   // gtk_window_set_keep_above isn't enough on OS X
@@ -600,8 +599,8 @@ void dt_bauhaus_init()
                    G_CALLBACK(dt_bauhaus_popup_button_press), (gpointer)NULL);
   // this is connected to the widget itself, not the popup. we're only interested
   // in mouse release events that are initiated by a press on the original widget.
-  // g_signal_connect (G_OBJECT (darktable.bauhaus->popup_area), "button-release-event",
-  //                   G_CALLBACK (dt_bauhaus_popup_button_release), (gpointer)NULL);
+  g_signal_connect (G_OBJECT (darktable.bauhaus->popup_area), "button-release-event",
+                    G_CALLBACK (dt_bauhaus_popup_button_release), (gpointer)NULL);
   g_signal_connect(G_OBJECT(darktable.bauhaus->popup_area), "key-press-event",
                    G_CALLBACK(dt_bauhaus_popup_key_press), (gpointer)NULL);
   g_signal_connect(G_OBJECT(darktable.bauhaus->popup_area), "scroll-event",
@@ -1671,14 +1670,11 @@ static gboolean dt_bauhaus_draw(GtkWidget *widget, cairo_t *crf, gpointer user_d
           = show_pango_text(cr, w->label, 2, 0, 0, FALSE, gtk_widget_is_sensitive(widget), FALSE);
       dt_bauhaus_draw_quad(w, cr);
 
-      if(gtk_widget_is_sensitive(widget))
-      {
-        dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-        gchar *text = d->text;
-        if(d->active >= 0) text = (gchar *)g_list_nth_data(d->labels, d->active);
-        show_pango_text(cr, text, width - 4 - height, 0, width - 4 - height - label_width - height, TRUE,
-                        TRUE, FALSE);
-      }
+      dt_bauhaus_combobox_data_t *d = &w->data.combobox;
+      gchar *text = d->text;
+      if(d->active >= 0) text = (gchar *)g_list_nth_data(d->labels, d->active);
+      show_pango_text(cr, text, width - 4 - height, 0, width - 4 - height - label_width - height, TRUE,
+                      gtk_widget_is_sensitive(widget), FALSE);
       break;
     }
     case DT_BAUHAUS_SLIDER:
@@ -1831,6 +1827,7 @@ static gboolean dt_bauhaus_slider_scroll(GtkWidget *widget, GdkEventScroll *even
   gdouble delta_y;
   dt_bauhaus_widget_t *w = (dt_bauhaus_widget_t *)widget;
   if(w->type != DT_BAUHAUS_SLIDER) return FALSE;
+  gtk_widget_grab_focus(widget);
 
   if(dt_gui_get_scroll_deltas(event, NULL, &delta_y))
   {
@@ -1874,6 +1871,7 @@ static gboolean dt_bauhaus_combobox_scroll(GtkWidget *widget, GdkEventScroll *ev
   dt_bauhaus_widget_t *w = (dt_bauhaus_widget_t *)widget;
   if(w->type != DT_BAUHAUS_COMBOBOX) return FALSE;
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
+  gtk_widget_grab_focus(widget);
 
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
   {

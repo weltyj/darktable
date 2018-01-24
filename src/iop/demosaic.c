@@ -2220,7 +2220,7 @@ static void vng_interpolate(float *out, const float *const in,
           +1, -1, +1, +1, 1, 0x88, +1, +0, +1, +2, 1, 0x08, +1, +0, +2, -1, 1, 0x40, +1, +0, +2, +1, 1, 0x10 },
       chood[] = { -1, -1, -1, 0, -1, +1, 0, +1, +1, +1, +1, 0, +1, -1, 0, -1 };
   int *ip, *code[16][16];
-  // ring buffer pointing to three most recent rows procesed (brow[3]
+  // ring buffer pointing to three most recent rows processed (brow[3]
   // is only used for rotating the buffer
   float(*brow[4])[4];
   const int width = roi_out->width, height = roi_out->height;
@@ -4908,6 +4908,9 @@ void reload_defaults(dt_iop_module_t *module)
 
   // we might be called from presets update infrastructure => there is no image
   if(!module->dev) goto end;
+
+  if(dt_image_is_monochrome(&module->dev->image_storage))
+    tmp.demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
 
   // only on for raw images:
   if(dt_image_is_raw(&module->dev->image_storage))

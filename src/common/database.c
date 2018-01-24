@@ -285,7 +285,7 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
       i = 0;
     }
 
-    // find the next free ammended version of name
+    // find the next free amended version of name
     sqlite3_prepare_v2(db->handle, "SELECT name FROM main.presets  WHERE name = ?1 || ' (' || ?2 || ')' AND "
                                    "operation = ?3 AND op_version = ?4",
                        -1, &innerstmt, NULL);
@@ -1038,7 +1038,7 @@ static gboolean _upgrade_library_schema(dt_database_t *db, int version)
  * _upgrade_data_schema_step() instead. */
 static gboolean _upgrade_data_schema(dt_database_t *db, int version)
 {
-  while(version < CURRENT_DATABASE_VERSION_LIBRARY)
+  while(version < CURRENT_DATABASE_VERSION_DATA)
   {
     int new_version = _upgrade_data_schema_step(db, version);
     if(new_version == version)
@@ -1337,7 +1337,7 @@ void dt_database_show_error(const dt_database_t *db)
 {
   if(!db->lock_acquired)
   {
-    char *label_text = g_markup_printf_escaped(_("an error has occured while trying to open the database from\n"
+    char *label_text = g_markup_printf_escaped(_("an error has occurred while trying to open the database from\n"
                                                   "\n"
                                                   "<span style=\"italic\">%s</span>\n"
                                                   "\n"
@@ -1360,7 +1360,7 @@ static gboolean pid_is_alive(int pid)
 {
   gboolean pid_is_alive;
 
-#ifdef __WIN32__
+#ifdef _WIN32
   pid_is_alive = FALSE;
   HANDLE h = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
   if(h)
@@ -1544,6 +1544,14 @@ start:
   db->dbfilename_data = g_strdup(dbfilename_data);
   db->dbfilename_library = g_strdup(dbfilename_library);
 
+  /* make sure the folder exists. this might not be the case for new databases */
+  char *data_path = g_path_get_dirname(db->dbfilename_data);
+  char *library_path = g_path_get_dirname(db->dbfilename_library);
+  g_mkdir_with_parents(data_path, 0750);
+  g_mkdir_with_parents(library_path, 0750);
+  g_free(data_path);
+  g_free(library_path);
+
   /* having more than one instance of darktable using the same database is a bad idea */
   /* try to get locks for the databases */
   db->lock_acquired = _lock_databases(db);
@@ -1554,6 +1562,9 @@ start:
     g_free(dbname);
     return db;
   }
+
+  /*  set the threading mode to Serialized */
+  sqlite3_config(SQLITE_CONFIG_SERIALIZED);
 
   /* opening / creating database */
   if(sqlite3_open(db->dbfilename_library, &db->handle))
@@ -1646,7 +1657,7 @@ start:
       // oh, bad situation. the database is corrupt and can't be read!
       // we inform the user here and let him decide what to do: exit or delete and try again.
 
-      char *label_text = g_markup_printf_escaped(_("an error has occured while trying to open the database from\n"
+      char *label_text = g_markup_printf_escaped(_("an error has occurred while trying to open the database from\n"
                                                    "\n"
                                                    "<span style=\"italic\">%s</span>\n"
                                                    "\n"
@@ -1722,7 +1733,7 @@ start:
     // oh, bad situation. the database is corrupt and can't be read!
     // we inform the user here and let him decide what to do: exit or delete and try again.
 
-    char *label_text = g_markup_printf_escaped(_("an error has occured while trying to open the database from\n"
+    char *label_text = g_markup_printf_escaped(_("an error has occurred while trying to open the database from\n"
                                                   "\n"
                                                   "<span style=\"italic\">%s</span>\n"
                                                   "\n"
