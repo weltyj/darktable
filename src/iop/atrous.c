@@ -624,6 +624,7 @@ static int get_samples(float *t, const dt_iop_atrous_data_t *const d, const dt_i
   return i;
 }
 
+
 static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const dt_iop_atrous_data_t *const d,
                       const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *const piece)
 {
@@ -637,22 +638,26 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
   // . . . . .
   // .   .   .   .   .
   // cut off too fine ones, if image is not detailed enough (due to roi_in->scale)
+
   const float scale = roi_in->scale / piece->iscale;
+
   // largest desired filter on input buffer (20% of input dim)
   const float supp0
       = MIN(2 * (2 << (MAX_NUM_SCALES - 1)) + 1,
             MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   int i = 0;
 
-  float prev_t = .1f ;
+  float t_prev = .1f ;
 
   for(; i < MAX_NUM_SCALES; i++)
   {
     // actual filter support on scaled buffer
     const float supp = 2 * (2 << i) + 1;
-    // approximates this filter size on unscaled input image:
+    //// approximates this filter size on unscaled input image:
     const float supp_in = supp * (1.0f / scale);
+    //const float supp_in = supp ;
     const float i_in = dt_log2f((supp_in - 1) * .5f) - 1.0f;
     // i_in = max_scale .. .. .. 0
     const float t = 1.0f - (i_in + .5f) / i0;
@@ -671,42 +676,56 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
     sharp[i] = 0.0025f * dt_draw_curve_calc_value(d->curve[atrous_s], t);
 
 
-    // a fix for the non-discrete nature of how the coarsest scale affects results -- Jeff Welty
-    // what happens is the coarsest scale is applied instantaneously as the image size changes, either
-    // because HQ export is turned off, or the preview window scale changes
-    // this fix slowly increases the effect of the new coarsest scale, creating a more uniform
+    // a fix for the non-continuous nature of how the coarsest scale affects results -- Jeff Welty
+    // what happens is the coarsest scale can be applied or removed as the image size changes by only 1 pixel
+    //  ... if the image size crosses the threshold where the coarsest scale meets the requirement of the supp0
+    // calculation above.
+
+    // This problem can occur in two cases 1) the image is exported and HQ export is turned off,
+    // or 2) the preview window scale changes.
+
+    // This fix slowly increases the effect of the new coarsest scale, creating a more uniform
     // application of the entire module
 
     // detect coarsest level by calculating t for i+1, if t of i+1 it is < 0. we are at the coarsest level
 
     const float supp_next = 2 * (2 << (i+1)) + 1;
-    // approximates this filter size on unscaled input image:
+    //// approximates this filter size on unscaled input image:
     const float supp_in_next = supp_next * (1.0f / scale);
+    //const float supp_in_next = supp_next ;
     const float i_in_next = dt_log2f((supp_in_next - 1) * .5f) - 1.0f;
     // i_in = max_scale .. .. .. 0
     const float t_next = 1.0f - (i_in_next + .5f) / i0;
 
+    // note -- these are here so the printf (for debugging) will have access
+    //float tmx=1.0 ; // for debugging
+    float effect_factor = 1.0 ;
+
     if(t_next < 0.0f) {
-      // asymptotic values for t, of the ith coarseness, emperically calculated.  0 and 1 were not calculated
-      const float t_max[] = {1.f, 1.f, .6670f,.4006f,.2857f,.2228f,.1818f,.1538f} ;
+      float dt = .5 ;
 
-      // effect factor scales both the boost, sharpness on the last (coarsest) level
-      float effect_factor = fminf(1.0f, t / t_max[i]) ;
+      if(i > 0) {
+        dt = t_prev - t ;
+        //tmx = dt ; // for debugging
 
-      //printf("t_prev:%0.3f t_max:%0.3f ef:%0.3 ", prev_t, t_max[i], effect_factor) ;
+        // effect factor scales both the boost, sharpness on the last (coarsest) level
+        effect_factor = fminf(1.0f, t / dt) ;
+      }
+
+      //printf("t_prev:%0.3f t_max:%0.3f ef:%0.3 ", t_prev, t_max[i], effect_factor) ;
 
       for(int k = 0; k < 4; k++) boost[i][k] = 1.+effect_factor*(boost[i][k]-1.0) ;
       sharp[i] *= effect_factor ;
 
-      // second coarsest level (i-1) needs an adjustment too, based on observations of resultant images
-      if(i > 2) {
-        float ef_prev = fminf(1.0f, prev_t / t_max[i-1]) ;
-        for(int k = 0; k < 4; k++) boost[i-1][k] = 1.+ef_prev*(boost[i-1][k]-1.0) ;
-        sharp[i-1] *= ef_prev ;
-      }
     }
 
-    prev_t = t ;
+    t_prev = t ;
+
+    //printf("i:%d iscale:%0.3f h:%0.1f (%2.0f%%), supp(in,,0) %4.0f,%4.0f,%4.0f, t:%0.2f tmax:%0.2f, tprev:%0.2f\n",
+      //i, piece->iscale,
+      //(float)(piece->buf_in.height*scale),
+      //100.f*supp/(float)(piece->buf_in.height*scale),
+      //supp_in, supp, supp0, t, tmx, t_prev);
 
     //printf("i %d scale %5.3f supp_in %4.0f supp %4.0f, t %5.3f boost %f %f thrs %f %f sharpen %f\n",
       //i, scale, supp_in, supp, t, boost[i][0], boost[i][2], thrs[i][0], thrs[i][1], sharp[i]);
